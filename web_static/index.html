@@ -1,0 +1,1098 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>播客追踪</title>
+  <style>
+    :root {
+      --bg: #f6f7f5;
+      --panel: #ffffff;
+      --panel-muted: #f0f2ef;
+      --line: #dcdfda;
+      --muted: #697168;
+      --text: #171a18;
+      --accent: #1c2420;
+      --accent-hover: #111713;
+      --accent-soft: #e9eee9;
+      --green: #2f6f4e;
+      --green-soft: #e7f1eb;
+      --amber: #8a5a12;
+      --amber-soft: #fff3dc;
+      --red: #b42318;
+      --shadow: 0 1px 2px rgba(23, 26, 24, 0.05);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+        "Microsoft YaHei", sans-serif;
+      font-size: 15px;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button {
+      border: 0;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      cursor: wait;
+      opacity: 0.7;
+    }
+
+    .app {
+      height: 100vh;
+      display: grid;
+      grid-template-rows: 58px 1fr;
+      min-width: 0;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      align-items: center;
+      gap: 16px;
+      padding: 0 28px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 19px;
+    }
+
+    .brand-mark {
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      color: #f6f7f5;
+      background: var(--accent);
+      font-weight: 800;
+    }
+
+    .top-actions {
+      justify-self: end;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .settings-menu {
+      position: relative;
+    }
+
+    .settings-button {
+      height: 32px;
+      border-radius: 7px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 10px;
+      color: var(--text);
+      background: var(--panel-muted);
+      font-weight: 650;
+    }
+
+    .settings-button:hover,
+    .settings-button[aria-expanded="true"] {
+      background: var(--accent-soft);
+    }
+
+    .settings-caret {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .settings-dropdown {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      min-width: 148px;
+      padding: 6px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      display: none;
+      z-index: 5;
+    }
+
+    .settings-menu.is-open .settings-dropdown {
+      display: block;
+    }
+
+    .settings-item {
+      min-height: 34px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      color: var(--text);
+      text-decoration: none;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+
+    .settings-item:hover {
+      background: var(--panel-muted);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      min-height: 0;
+    }
+
+    .sidebar {
+      background: var(--panel);
+      border-right: 1px solid var(--line);
+      padding: 22px 18px;
+      overflow: auto;
+    }
+
+    .add-form {
+      display: grid;
+      grid-template-columns: 1fr 42px;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .add-form input {
+      min-width: 0;
+      height: 40px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 0 12px;
+      outline: none;
+      background: #fff;
+    }
+
+    .add-form input:focus {
+      border-color: var(--green);
+      box-shadow: 0 0 0 3px rgba(47, 111, 78, 0.13);
+    }
+
+    .add-status {
+      min-height: 20px;
+      margin: 0 4px 12px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 20px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .add-status.error {
+      color: var(--red);
+    }
+
+    .icon-button,
+    .primary-button,
+    .quiet-button {
+      height: 40px;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+
+    .icon-button,
+    .primary-button {
+      background: var(--accent);
+      color: white;
+    }
+
+    .icon-button:hover,
+    .primary-button:hover {
+      background: var(--accent-hover);
+    }
+
+    .quiet-button {
+      color: var(--text);
+      background: var(--panel-muted);
+      padding: 0 10px;
+      font-weight: 600;
+    }
+
+    .quiet-button:hover {
+      background: var(--accent-soft);
+    }
+
+    .source-summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--muted);
+      margin: 10px 4px 12px;
+      font-weight: 600;
+    }
+
+    .source-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .source {
+      width: 100%;
+      height: 58px;
+      display: grid;
+      grid-template-columns: 42px 1fr auto;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--text);
+      text-align: left;
+    }
+
+    .source:hover {
+      background: var(--panel-muted);
+    }
+
+    .source.active {
+      background: var(--accent-soft);
+      box-shadow: inset 3px 0 0 var(--green);
+    }
+
+    .avatar {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: #111827;
+      color: white;
+      font-weight: 700;
+      overflow: hidden;
+      flex: 0 0 auto;
+    }
+
+    .avatar img {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: cover;
+    }
+
+    .source.active .avatar {
+      background: var(--accent);
+    }
+
+    .source-title {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 650;
+    }
+
+    .badge {
+      min-width: 28px;
+      height: 24px;
+      padding: 0 8px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--panel-muted);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .content {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: 68px 1fr;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 0 28px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .heading {
+      min-width: 0;
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+    }
+
+    .heading h1 {
+      margin: 0;
+      font-size: 20px;
+      line-height: 1.2;
+    }
+
+    .meta {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .toolbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .filter-input,
+    .filter-select {
+      height: 32px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 0 10px;
+      background: #fff;
+      color: var(--text);
+    }
+
+    .filter-input {
+      width: 180px;
+      outline: none;
+    }
+
+    .filter-input:focus {
+      border-color: var(--green);
+      box-shadow: 0 0 0 3px rgba(47, 111, 78, 0.13);
+    }
+
+    .table-wrap {
+      min-height: 0;
+      overflow: auto;
+      padding: 22px 28px 30px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+    }
+
+    th,
+    td {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: middle;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: var(--panel-muted);
+      color: var(--muted);
+      font-weight: 700;
+      text-align: left;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .title-cell {
+      min-width: 260px;
+      font-weight: 650;
+      line-height: 1.45;
+    }
+
+    .program {
+      display: block;
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .date-cell {
+      width: 190px;
+      color: #3f4641;
+      white-space: nowrap;
+    }
+
+    .actions-cell {
+      width: 156px;
+      white-space: nowrap;
+      text-align: right;
+    }
+
+    .action-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      justify-content: flex-end;
+    }
+
+    .action-button {
+      width: 52px;
+      height: 28px;
+      padding: 0;
+      border-radius: 7px;
+      background: var(--panel-muted);
+      color: var(--text);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1;
+    }
+
+    .action-button:hover {
+      background: var(--accent-soft);
+    }
+
+    .action-button.primary {
+      width: 76px;
+    }
+
+    .action-button.readable-action {
+      background: var(--accent);
+      color: white;
+    }
+
+    .action-button.readable-action:hover {
+      background: var(--accent-hover);
+    }
+
+    .action-button.generate-action {
+      background: var(--amber-soft);
+      color: var(--amber);
+    }
+
+    .action-button.generate-action:hover {
+      background: #ffe8bd;
+    }
+
+    .action-button.retry-action {
+      background: #fae7e4;
+      color: var(--red);
+    }
+
+    .action-button.retry-action:hover {
+      background: #f5d3cf;
+    }
+
+    .action-button.loading-action {
+      position: relative;
+      overflow: hidden;
+      background: var(--panel-muted);
+      color: var(--muted);
+    }
+
+    .action-button.loading-action .button-text {
+      position: relative;
+      z-index: 1;
+    }
+
+    .action-button.loading-action .progress-fill {
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: var(--progress, 5%);
+      height: 3px;
+      background: var(--green);
+      transition: width 240ms ease;
+    }
+
+    .action-button:disabled {
+      cursor: wait;
+      opacity: 0.75;
+    }
+
+    .message {
+      min-width: 160px;
+      max-width: 420px;
+      color: var(--muted);
+      font-size: 13px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      text-align: right;
+    }
+
+    .message.error {
+      color: var(--red);
+    }
+
+    .empty {
+      height: 260px;
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      background: var(--panel);
+      border: 1px solid var(--line);
+    }
+
+    @media (max-width: 860px) {
+      .topbar {
+        grid-template-columns: 1fr auto;
+      }
+
+      .layout {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr;
+      }
+
+      .sidebar {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+        max-height: 260px;
+      }
+
+      .toolbar {
+        align-items: flex-start;
+        flex-direction: column;
+        padding: 14px 18px;
+      }
+
+      .toolbar-actions,
+      .message {
+        width: 100%;
+        text-align: left;
+      }
+
+      .table-wrap {
+        padding: 16px 18px;
+      }
+
+      .date-cell,
+      .actions-cell {
+        width: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">播</div>
+        <span>播客追踪</span>
+      </div>
+      <div class="top-actions">
+        <div class="settings-menu" id="settingsMenu">
+          <button class="settings-button" id="settingsButton" type="button" aria-haspopup="menu" aria-expanded="false">
+            设置 <span class="settings-caret">▾</span>
+          </button>
+          <div class="settings-dropdown" id="settingsDropdown" role="menu" aria-labelledby="settingsButton">
+            <a class="settings-item" href="/glossary" role="menuitem">热词库</a>
+          </div>
+        </div>
+        <span id="dataSummary">-</span>
+      </div>
+    </header>
+
+    <div class="layout">
+      <aside class="sidebar">
+        <form class="add-form" id="addForm">
+          <input id="urlInput" name="url" autocomplete="off" placeholder="小宇宙链接或 RSS 链接">
+          <button class="icon-button" type="submit" title="添加订阅" aria-label="添加订阅">+</button>
+        </form>
+        <div class="add-status" id="addStatus"></div>
+        <div class="source-summary">
+          <span id="sourceCount">共0个订阅</span>
+          <span id="pendingCount">0未生成</span>
+        </div>
+        <div class="source-list" id="sourceList"></div>
+      </aside>
+
+      <main class="content">
+        <div class="toolbar">
+          <div class="heading">
+            <h1 id="currentTitle">全部</h1>
+            <span class="meta" id="currentMeta">0 条</span>
+          </div>
+          <div class="toolbar-actions">
+            <input class="filter-input" id="searchInput" placeholder="搜索标题/节目" autocomplete="off">
+            <select class="filter-select" id="statusSelect">
+              <option value="all">全部状态</option>
+              <option value="pending">未生成</option>
+              <option value="generating">生成中</option>
+              <option value="failed">失败</option>
+              <option value="readable">已生成</option>
+            </select>
+            <button class="quiet-button" id="refreshButton" type="button">↻ 更新全部</button>
+            <span class="message" id="message"></span>
+          </div>
+        </div>
+
+        <section class="table-wrap" id="episodeArea"></section>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    const APP_URL = "http://127.0.0.1:8765/";
+    const STAGE_PROGRESS = {
+      queued: { start: 5, end: 9, seconds: 20 },
+      asr_queued: { start: 8, end: 9, seconds: 600 },
+      prepare_audio: { start: 10, end: 14, seconds: 12 },
+      download_audio: { start: 15, end: 19, seconds: 60 },
+      convert_audio: { start: 20, end: 29, seconds: 40 },
+      load_model: { start: 30, end: 44, seconds: 180 },
+      transcribe_audio: { start: 45, end: 61, seconds: 1000 },
+      write_transcript: { start: 62, end: 64, seconds: 16 },
+      transcript_ready: { start: 65, end: 74, seconds: 24 },
+      generate_readable: { start: 75, end: 93, seconds: 420 },
+      verify_readable: { start: 94, end: 97, seconds: 35 },
+      checking: { start: 98, end: 99, seconds: 12 }
+    };
+    const state = {
+      selected: "all",
+      data: { subscriptions: [], episodes: [], counts: {} },
+      busy: false,
+      autoAddTimer: null,
+      jobPollTimer: null,
+      query: "",
+      statusFilter: "all"
+    };
+
+    const sourceList = document.getElementById("sourceList");
+    const episodeArea = document.getElementById("episodeArea");
+    const currentTitle = document.getElementById("currentTitle");
+    const currentMeta = document.getElementById("currentMeta");
+    const sourceCount = document.getElementById("sourceCount");
+    const pendingCount = document.getElementById("pendingCount");
+    const dataSummary = document.getElementById("dataSummary");
+    const message = document.getElementById("message");
+    const addForm = document.getElementById("addForm");
+    const addStatus = document.getElementById("addStatus");
+    const urlInput = document.getElementById("urlInput");
+    const addButton = addForm.querySelector("button[type='submit']");
+    const refreshButton = document.getElementById("refreshButton");
+    const settingsMenu = document.getElementById("settingsMenu");
+    const settingsButton = document.getElementById("settingsButton");
+    const searchInput = document.getElementById("searchInput");
+    const statusSelect = document.getElementById("statusSelect");
+
+    async function request(path, options = {}) {
+      if (location.protocol === "file:") {
+        throw new Error("当前是 file:// 静态文件，请打开 http://127.0.0.1:8765/");
+      }
+      let response;
+      try {
+        response = await fetch(path, {
+          headers: { "Content-Type": "application/json" },
+          ...options
+        });
+      } catch (error) {
+        throw new Error("本地服务连接中断，正在自动重试");
+      }
+      let payload = {};
+      try {
+        payload = await response.json();
+      } catch (error) {
+        throw new Error("本地服务返回异常，请稍后重试");
+      }
+      if (!response.ok) {
+        throw new Error(payload.error || "请求失败");
+      }
+      return payload;
+    }
+
+    async function loadState() {
+      const payload = await request("/api/state");
+      state.data = payload;
+      clearConnectionError();
+      render();
+    }
+
+    function setMessage(text, isError = false) {
+      message.textContent = text || "";
+      message.classList.toggle("error", isError);
+    }
+
+    function setAddStatus(text, isError = false) {
+      addStatus.textContent = text || "";
+      addStatus.classList.toggle("error", isError);
+    }
+
+    function clearConnectionError() {
+      const clearable = text => [
+        "Failed to fetch",
+        "本地服务连接中断，正在自动重试",
+        "本地服务返回异常，请稍后重试"
+      ].includes(text.trim());
+      if (message.classList.contains("error") && clearable(message.textContent || "")) {
+        setMessage("");
+      }
+      if (addStatus.classList.contains("error") && clearable(addStatus.textContent || "")) {
+        setAddStatus("");
+      }
+    }
+
+    function setBusy(isBusy) {
+      state.busy = isBusy;
+      addButton.disabled = isBusy;
+      refreshButton.disabled = isBusy;
+    }
+
+    function guardFileMode() {
+      if (location.protocol !== "file:") return false;
+      const text = "当前打开的是静态文件，正在跳转到本地服务...";
+      setMessage(text, true);
+      setAddStatus("请使用 http://127.0.0.1:8765/", true);
+      sourceCount.textContent = "服务未连接";
+      pendingCount.textContent = "";
+      dataSummary.textContent = "file://";
+      setBusy(true);
+      window.setTimeout(() => {
+        window.location.replace(APP_URL);
+      }, 350);
+      return true;
+    }
+
+    function extractUrl(value) {
+      const match = value.trim().match(/https?:\/\/\S+/i);
+      return match ? match[0] : "";
+    }
+
+    function looksLikeUrl(value) {
+      return Boolean(extractUrl(value));
+    }
+
+    function selectedSubscription() {
+      return state.data.subscriptions.find(item => item.id === state.selected);
+    }
+
+    function episodeStatus(episode) {
+      if (episode.has_readable) return "readable";
+      if (episode.display_status === "generating") return "generating";
+      if (episode.display_status === "failed") return "failed";
+      return "pending";
+    }
+
+    function visibleEpisodes() {
+      let episodes = state.data.episodes || [];
+      if (state.selected !== "all") {
+        episodes = episodes.filter(episode => episode.source_id === state.selected || episode.subscription_id === state.selected);
+      }
+      if (state.statusFilter !== "all") {
+        episodes = episodes.filter(episode => episodeStatus(episode) === state.statusFilter);
+      }
+      if (state.query) {
+        episodes = episodes.filter(episode =>
+          `${episode.title || ""} ${episode.program_title || ""}`.toLowerCase().includes(state.query)
+        );
+      }
+      return episodes;
+    }
+
+    function render() {
+      const counts = state.data.counts || {};
+      sourceCount.textContent = `共${counts.subscriptions || 0}个订阅`;
+      pendingCount.textContent = `${counts.pending || 0}未生成`;
+      dataSummary.textContent = `${counts.episodes || 0} 条单集`;
+      renderSources();
+      renderEpisodes();
+      syncJobPolling();
+    }
+
+    function renderSources() {
+      const subscriptions = state.data.subscriptions || [];
+      const allCount = (state.data.episodes || []).length;
+      const allActive = state.selected === "all" ? " active" : "";
+      const rows = [
+        `<button class="source${allActive}" data-id="all" type="button">
+          <span class="avatar">ALL</span>
+          <span class="source-title">全部</span>
+          <span class="badge">${allCount}</span>
+        </button>`
+      ];
+      for (const sub of subscriptions) {
+        const active = state.selected === sub.id ? " active" : "";
+        const initial = (sub.title || "?").slice(0, 1).toUpperCase();
+        rows.push(`<button class="source${active}" data-id="${escapeAttr(sub.id)}" type="button">
+          <span class="avatar">${avatarMarkup(sub, initial)}</span>
+          <span class="source-title" title="${escapeAttr(sub.title)}">${escapeHtml(sub.title)}</span>
+          <span class="badge">${sub.episode_count || 0}</span>
+        </button>`);
+      }
+      sourceList.innerHTML = rows.join("");
+      sourceList.querySelectorAll(".source").forEach(button => {
+        button.addEventListener("click", () => {
+          state.selected = button.dataset.id || "all";
+          render();
+        });
+      });
+    }
+
+    function renderEpisodes() {
+      const episodes = visibleEpisodes();
+      const sub = selectedSubscription();
+      currentTitle.textContent = sub ? sub.title : "全部";
+      currentMeta.textContent = `${episodes.length} 条`;
+
+      if (!episodes.length) {
+        episodeArea.innerHTML = `<div class="empty">暂无单集</div>`;
+        return;
+      }
+
+      const rows = episodes.map(episode => `<tr>
+        <td class="title-cell">
+          ${escapeHtml(episode.title)}
+          <span class="program">${escapeHtml(episode.program_title || "")}</span>
+        </td>
+        <td class="date-cell">${formatDate(episode.published_at)}</td>
+        <td class="actions-cell">${actionButtons(episode)}</td>
+      </tr>`).join("");
+
+      episodeArea.innerHTML = `<table>
+        <thead>
+          <tr>
+            <th>标题</th>
+            <th>发布时间</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+
+      episodeArea.querySelectorAll("[data-open]").forEach(button => {
+        button.addEventListener("click", () => window.open(button.dataset.open, "_blank"));
+      });
+      episodeArea.querySelectorAll("[data-navigate]").forEach(button => {
+        button.addEventListener("click", () => {
+          window.location.href = button.dataset.navigate;
+        });
+      });
+      episodeArea.querySelectorAll("[data-generate]").forEach(button => {
+        button.addEventListener("click", () => startReadableJob(button.dataset.generate));
+      });
+    }
+
+    function actionButtons(episode) {
+      let primary = "";
+      if (episode.has_readable) {
+        primary = `<button class="action-button primary readable-action" data-navigate="${escapeAttr(episode.document_url)}" type="button">阅读版</button>`;
+      } else if (episode.display_status === "generating") {
+        const progress = progressValue(episode);
+        const label = episode.job_stage_label || "生成中";
+        primary = `<button class="action-button primary loading-action" style="--progress: ${progress}%;" title="${escapeAttr(`${label} ${progress}%`)}" type="button" disabled><span class="button-text">${escapeHtml(label)}</span><span class="progress-fill"></span></button>`;
+      } else if (episode.display_status === "failed") {
+        primary = `<button class="action-button primary retry-action" data-generate="${escapeAttr(episode.id)}" title="${escapeAttr(episode.job_error || "生成失败")}" type="button">重试</button>`;
+      } else {
+        primary = `<button class="action-button primary generate-action" data-generate="${escapeAttr(episode.id)}" type="button">生成</button>`;
+      }
+      return `<div class="action-group">
+        ${primary}
+        <button class="action-button" data-open="${escapeAttr(episode.source_url)}" type="button">原文</button>
+      </div>`;
+    }
+
+    function progressValue(episode) {
+      const fallback = Number(episode.job_progress);
+      const base = Number.isFinite(fallback) ? fallback : 5;
+      const range = STAGE_PROGRESS[episode.job_stage] || { start: base, end: base, seconds: 1 };
+      const startedAt = Date.parse(episode.job_stage_started_at || episode.started_at || episode.created_at || "");
+      if (Number.isNaN(startedAt)) {
+        return clampProgress(Math.max(base, range.start));
+      }
+      const elapsed = Math.max(0, (Date.now() - startedAt) / 1000);
+      const ratio = Math.min(1, elapsed / range.seconds);
+      const eased = range.start + (range.end - range.start) * ratio;
+      return clampProgress(Math.max(base, eased));
+    }
+
+    function clampProgress(value) {
+      return Math.max(0, Math.min(100, Math.round(value)));
+    }
+
+    async function startReadableJob(episodeId) {
+      if (!episodeId) return;
+      setMessage("已开始生成...");
+      try {
+        const payload = await request("/api/jobs/readable", {
+          method: "POST",
+          body: JSON.stringify({ episode_id: episodeId })
+        });
+        state.data = payload.state;
+        setMessage("生成中，完成后会自动变成阅读版");
+        render();
+      } catch (error) {
+        setMessage(error.message, true);
+        window.setTimeout(() => {
+          loadState()
+            .then(() => setMessage(""))
+            .catch(() => syncJobPolling());
+        }, 1500);
+      }
+    }
+
+    function syncJobPolling() {
+      clearTimeout(state.jobPollTimer);
+      const active = (state.data.episodes || []).some(episode => episode.display_status === "generating");
+      if (!active) return;
+      state.jobPollTimer = setTimeout(() => {
+        loadState().catch(error => {
+          setMessage(error.message, true);
+          syncJobPolling();
+        });
+      }, 4000);
+    }
+
+    function avatarMarkup(source, fallback) {
+      if (source.avatar_url) {
+        return `<img src="${escapeAttr(source.avatar_url)}" alt="">`;
+      }
+      return escapeHtml(fallback);
+    }
+
+    function formatDate(value) {
+      if (!value) return "";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return value;
+      const pad = number => String(number).padStart(2, "0");
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function escapeAttr(value) {
+      return escapeHtml(value);
+    }
+
+    async function addSubscriptionFromInput(reason = "manual") {
+      const url = extractUrl(urlInput.value);
+      if (!url || state.busy) return;
+      setBusy(true);
+      const loadingText = reason === "paste" ? "已粘贴，正在识别..." : "正在识别...";
+      setMessage(loadingText);
+      setAddStatus(loadingText);
+      try {
+        const payload = await request("/api/subscriptions", {
+          method: "POST",
+          body: JSON.stringify({ url })
+        });
+        state.data = payload.state;
+        state.selected = payload.subscription.id;
+        urlInput.value = "";
+        setMessage(`已添加：${payload.subscription.title}`);
+        setAddStatus(`已添加：${payload.subscription.title}`);
+        render();
+      } catch (error) {
+        setMessage(error.message, true);
+        setAddStatus(error.message, true);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    addForm.addEventListener("submit", event => {
+      event.preventDefault();
+      addSubscriptionFromInput();
+    });
+
+    urlInput.addEventListener("keydown", event => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      addSubscriptionFromInput();
+    });
+
+    urlInput.addEventListener("paste", event => {
+      const pasted = event.clipboardData?.getData("text")?.trim() || "";
+      if (!looksLikeUrl(pasted)) return;
+      setAddStatus("已粘贴，准备识别...");
+      setTimeout(() => addSubscriptionFromInput("paste"), 0);
+    });
+
+    urlInput.addEventListener("input", () => {
+      clearTimeout(state.autoAddTimer);
+      if (!looksLikeUrl(urlInput.value) || state.busy) return;
+      setAddStatus("检测到链接，准备识别...");
+      state.autoAddTimer = setTimeout(() => addSubscriptionFromInput("paste"), 450);
+    });
+
+    searchInput.addEventListener("input", () => {
+      state.query = searchInput.value.trim().toLowerCase();
+      render();
+    });
+
+    statusSelect.addEventListener("change", () => {
+      state.statusFilter = statusSelect.value;
+      render();
+    });
+
+    refreshButton.addEventListener("click", async () => {
+      if (state.busy) return;
+      setBusy(true);
+      setMessage("更新中...");
+      try {
+        const payload = await request("/api/check", { method: "POST", body: "{}" });
+        state.data = payload.state;
+        setMessage(`新增 ${payload.report.new_episode_count} 条`);
+        render();
+      } catch (error) {
+        setMessage(error.message, true);
+      } finally {
+        setBusy(false);
+      }
+    });
+
+    function setSettingsOpen(open) {
+      if (!settingsMenu || !settingsButton) return;
+      settingsMenu.classList.toggle("is-open", open);
+      settingsButton.setAttribute("aria-expanded", open ? "true" : "false");
+    }
+
+    if (settingsButton && settingsMenu) {
+      settingsButton.addEventListener("click", event => {
+        event.stopPropagation();
+        setSettingsOpen(!settingsMenu.classList.contains("is-open"));
+      });
+      document.addEventListener("click", event => {
+        if (settingsMenu.contains(event.target)) return;
+        setSettingsOpen(false);
+      });
+      document.addEventListener("keydown", event => {
+        if (event.key === "Escape") setSettingsOpen(false);
+      });
+    }
+
+    if (!guardFileMode()) {
+      loadState().catch(error => {
+        setMessage(error.message, true);
+        setAddStatus(error.message, true);
+      });
+    }
+  </script>
+</body>
+</html>

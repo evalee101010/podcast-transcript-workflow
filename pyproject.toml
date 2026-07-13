@@ -1,0 +1,38 @@
+[project]
+name = "podcast-transcript-workflow"
+version = "0.1.0"
+description = "Local-first podcast subscription, transcription, readable transcript, and optional Feishu/Lark publishing workflow."
+requires-python = ">=3.9"
+readme = "README.md"
+license = { text = "MIT" }
+# Core tracking (add/check/episodes/transcript) uses only the standard library.
+# ASR backends are optional extras so the tracker stays importable without heavy deps.
+dependencies = []
+
+[project.optional-dependencies]
+# Default backend: local, free, Chinese-friendly, with CAM++ speaker diarization.
+funasr = [
+    "funasr>=1.1,<2",
+    "torch>=2.1",
+    "torchaudio>=2.1",
+    "modelscope>=1.15",
+]
+# Fallback backend: strong ASR, NO speaker diarization.
+whisper = [
+    "faster-whisper>=1.0",
+    "opencc-python-reimplemented>=0.1.7",  # whisper 偶发繁体输出，转回简体
+]
+# Optional cloud backend: requires OPENAI_API_KEY and the official transcribe skill.
+openai = [
+    "openai>=2.43.0",
+]
+
+[project.scripts]
+podcast-tracker = "podcast_tracker.cli:main"
+
+[tool.setuptools]
+# 仓库根下 data/ web_static/ 不是 Python 包，显式声明避免 flat-layout 自动发现报错
+packages = ["podcast_tracker"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

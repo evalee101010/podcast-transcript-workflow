@@ -1,0 +1,14 @@
+[
+  {
+    "id": "ep-example-1",
+    "subscription_id": "sub-example-1",
+    "program_title": "Example Podcast",
+    "title": "Episode 1: Hello World",
+    "source_url": "https://www.xiaoyuzhoufm.com/episode/0000000000000000000example",
+    "audio_url": "https://example.com/audio/ep1.m4a",
+    "published_at": "2026-01-01T00:00:00+00:00",
+    "created_at": "2026-01-01T01:00:00+00:00",
+    "transcript_status": "pending",
+    "transcript_path": null
+  }
+]

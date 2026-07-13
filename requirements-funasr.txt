@@ -1,0 +1,15 @@
+# FunASR local backend (default) — Chinese ASR + CAM++ speaker diarization.
+# Install into the project venv:
+#   python3 -m venv .venv && source .venv/bin/activate
+#   pip install -r requirements-funasr.txt
+#
+# Notes:
+#  * First run downloads paraformer-zh / fsmn-vad / ct-punc / cam++ models
+#    (~1-2 GB) from ModelScope into ~/.cache/modelscope. Subsequent runs are offline.
+#  * On Apple Silicon FunASR runs on CPU; torch wheels install via pip directly.
+#  * Pin exact versions after the first successful run for reproducibility.
+
+funasr>=1.1,<2
+torch>=2.1
+torchaudio>=2.1
+modelscope>=1.15
