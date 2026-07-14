@@ -23,22 +23,22 @@ fruit characters for writing, notes, or research tools.
 
 ## Podcast Workbench Icon
 
-The podcast workbench uses the "Orange Cat Monitor" character:
+The podcast workbench uses the "Peach Podcast Producer" character:
 
-- A centered orange cat head wearing teal over-ear headphones.
-- The headphones are the strongest functional cue and remain visible at 32 px.
-- The cat expression is calm and cheerful, cute without looking juvenile.
-- Background is warm pale cream with a light lower band.
-- A coral status dot sits at the upper right.
-- Shapes are bold, softly dimensional, and free of outlines that become noisy at
-  small sizes.
+- A centered smiling peach wearing coral-and-cream over-ear headphones.
+- A small studio microphone and transcript page make the transcription workflow
+  recognizable without relying on an app name.
+- The peach expression is calm and cheerful, cute without looking juvenile.
+- Background is soft peach with a warmer lower desktop band.
+- Shapes are softly dimensional and use restrained, tactile texture.
 
-The icon must not include microphones, waveform text, app names, watermarks, or
-personal information.
+The icon must not include app names, watermarks, signatures, or personal
+information.
 
 ## Deliverables
 
-- High-resolution square PNG master at 1024 x 1024.
+- High-resolution square PNG master at 1024 x 1024, cropped from the approved
+  user-provided artwork without generative restyling.
 - macOS `.icns` icon derived from the approved master when local tools permit.
 - A 128 x 128 preview used to verify small-size readability.
 
@@ -46,7 +46,8 @@ The final files live under `assets/tool-pantry/` and use descriptive filenames.
 
 ## Acceptance Checks
 
-- The subject reads as an orange cat with headphones at 128 px and 32 px.
+- The peach, headphones, microphone, and transcript remain distinguishable at
+  128 px; the peach-and-headphones silhouette remains clear at 32 px.
 - The silhouette does not blend into the background.
 - No text or personal data appears in the image or filename.
 - The icon looks coherent against the user's cool, ocean-toned desktop.
