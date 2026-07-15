@@ -1,7 +1,10 @@
 from dataclasses import replace
+from http.client import HTTPConnection
+from http.server import ThreadingHTTPServer
 import json
 from pathlib import Path
 import tempfile
+import threading
 import unittest
 from unittest import mock
 
@@ -14,6 +17,7 @@ from podcast_tracker.web import (
     _health_payload,
     _make_handler,
     _parse_glossary_sources,
+    _resolve_static_asset,
     _render_document_conflict_page,
     _render_document_page,
     _render_glossary_page,
@@ -53,6 +57,55 @@ class _FakeJobManager:
 
     def latest_by_episode(self) -> dict[str, ReadableJob]:
         return self.jobs
+
+
+class StaticAssetTests(unittest.TestCase):
+    def test_asset_get_head_and_traversal_protection(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            asset_dir = root / "assets"
+            asset_dir.mkdir()
+            payload = b"fake-png-payload"
+            (asset_dir / "banner.png").write_bytes(payload)
+            (root / "secret.png").write_bytes(b"private")
+            store = _store(root / "data")
+
+            with mock.patch("podcast_tracker.web.STATIC_ASSET_DIR", asset_dir):
+                handler = _make_handler(store, _FakeJobManager({}))
+                server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                connection = HTTPConnection(*server.server_address, timeout=3)
+                try:
+                    connection.request("GET", "/assets/banner.png")
+                    response = connection.getresponse()
+                    self.assertEqual(response.status, 200)
+                    self.assertEqual(response.getheader("Content-Type"), "image/png")
+                    self.assertEqual(response.getheader("Cache-Control"), "no-store")
+                    self.assertEqual(response.read(), payload)
+
+                    connection.request("HEAD", "/assets/banner.png")
+                    response = connection.getresponse()
+                    self.assertEqual(response.status, 200)
+                    self.assertEqual(response.getheader("Content-Length"), str(len(payload)))
+                    self.assertEqual(response.read(), b"")
+
+                    connection.request("GET", "/assets/%2e%2e/secret.png")
+                    response = connection.getresponse()
+                    self.assertEqual(response.status, 404)
+                    response.read()
+                finally:
+                    connection.close()
+                    server.shutdown()
+                    server.server_close()
+                    thread.join(timeout=3)
+
+    def test_resolver_rejects_unknown_asset_types(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            asset_dir = Path(tmpdir)
+            (asset_dir / "notes.txt").write_text("not public", encoding="utf-8")
+            with mock.patch("podcast_tracker.web.STATIC_ASSET_DIR", asset_dir):
+                self.assertIsNone(_resolve_static_asset("/assets/notes.txt"))
 
 
 class _CapturingJobManager:

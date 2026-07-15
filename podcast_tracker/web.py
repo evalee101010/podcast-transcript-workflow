@@ -33,6 +33,13 @@ from .store import Store
 
 
 STATIC_DIR = PROJECT_ROOT / "web_static"
+STATIC_ASSET_DIR = STATIC_DIR / "assets"
+STATIC_ASSET_CONTENT_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+}
 
 
 def run_server(host: str = "127.0.0.1", port: int = 8765) -> None:
@@ -86,6 +93,9 @@ def _make_handler(
             if parsed.path in {"/", "/index.html"}:
                 self._send_file(STATIC_DIR / "index.html", "text/html; charset=utf-8", body=False)
                 return
+            if parsed.path.startswith("/assets/"):
+                self._handle_static_asset(parsed.path, body=False)
+                return
             if parsed.path == "/glossary":
                 payload = _render_glossary_page(store).encode("utf-8")
                 self._send_bytes(payload, "text/html; charset=utf-8", body=False)
@@ -111,6 +121,9 @@ def _make_handler(
             parsed = urlparse(self.path)
             if parsed.path in {"/", "/index.html"}:
                 self._send_file(STATIC_DIR / "index.html", "text/html; charset=utf-8")
+                return
+            if parsed.path.startswith("/assets/"):
+                self._handle_static_asset(parsed.path)
                 return
             if parsed.path == "/glossary":
                 payload = _render_glossary_page(store).encode("utf-8")
@@ -443,6 +456,14 @@ def _make_handler(
                 return
             self._send_bytes(payload, "text/html; charset=utf-8", body=body)
 
+        def _handle_static_asset(self, request_path: str, body: bool = True) -> None:
+            resolved = _resolve_static_asset(request_path)
+            if resolved is None:
+                self.send_error(HTTPStatus.NOT_FOUND, "Not found")
+                return
+            path, content_type = resolved
+            self._send_file(path, content_type, body=body)
+
         def _send_json(
             self,
             data: dict,
@@ -490,6 +511,26 @@ def _make_handler(
                 self.wfile.write(payload)
 
     return PodcastTrackerHandler
+
+
+def _resolve_static_asset(request_path: str) -> tuple[Path, str] | None:
+    if not request_path.startswith("/assets/"):
+        return None
+    relative_path = unquote(request_path.removeprefix("/assets/"))
+    if not relative_path or "\x00" in relative_path:
+        return None
+
+    asset_root = STATIC_ASSET_DIR.resolve()
+    candidate = (asset_root / relative_path).resolve()
+    try:
+        candidate.relative_to(asset_root)
+    except ValueError:
+        return None
+
+    content_type = STATIC_ASSET_CONTENT_TYPES.get(candidate.suffix.lower())
+    if content_type is None or not candidate.is_file():
+        return None
+    return candidate, content_type
 
 
 def _make_lark_completion_hook(lark_exporter: LarkExporter):
