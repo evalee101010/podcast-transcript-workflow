@@ -203,6 +203,7 @@ class ReadableJobManagerTests(unittest.TestCase):
             command_text = " ".join(commands[0])
             self.assertIn("/bin/codex", commands[0][0])
             self.assertEqual(commands[0][1], "exec")
+            self.assertIn("--skip-git-repo-check", commands[0])
             self.assertIn("--add-dir", commands[0])
             self.assertNotIn("-q", commands[0])
             self.assertNotIn("--full-auto", commands[0])

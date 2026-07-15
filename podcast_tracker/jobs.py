@@ -420,6 +420,7 @@ class ReadableJobManager:
         return [
             self.codex_bin,
             "exec",
+            "--skip-git-repo-check",
             "-C",
             str(PROJECT_ROOT),
             "--add-dir",
