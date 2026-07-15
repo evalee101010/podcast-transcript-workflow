@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import tempfile
 import unittest
@@ -7,7 +8,7 @@ import unittest
 from podcast_tracker.feed import FeedEpisode, ParsedFeed
 from podcast_tracker.jobs import ReadableJob
 from podcast_tracker.lark_export import LarkExport
-from podcast_tracker.models import Subscription
+from podcast_tracker.models import Episode, Subscription
 from podcast_tracker.scheduled import render_scheduled_update_report, run_scheduled_update
 from podcast_tracker.store import Store
 
@@ -216,6 +217,65 @@ class ScheduledUpdateTests(unittest.TestCase):
             self.assertEqual([episode_id for episode_id, _path in lark.exported], ["ep1"])
             rendered = render_scheduled_update_report(second)
             self.assertIn("（自动补跑）", rendered)
+
+    def test_scheduled_update_recovers_recent_unfinished_episode_without_job_history(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = _store(Path(tmpdir))
+            store.upsert_subscription(_subscription())
+            now = datetime.now(timezone.utc)
+            store.upsert_episode(
+                Episode(
+                    id="missed",
+                    subscription_id="sub1",
+                    program_title="测试节目",
+                    title="漏跑的一期",
+                    source_url="https://example.com/missed",
+                    audio_url="https://cdn.example.com/missed.mp3",
+                    published_at=(now - timedelta(days=2)).isoformat(),
+                    created_at=(now - timedelta(days=2)).isoformat(),
+                )
+            )
+            manager = StubJobManager(store=store, docs_dir=Path(tmpdir) / "docs")
+
+            report = run_scheduled_update(
+                store,
+                resolver=lambda _url: _feed(),
+                job_manager=manager,
+                lark_exporter=StubLarkExporter(),
+            )
+
+            self.assertEqual(manager.started, ["missed"])
+            self.assertEqual(report.succeeded_count, 1)
+            self.assertTrue(report.generated[0].retried)
+
+    def test_scheduled_update_does_not_recover_old_unfinished_history(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = _store(Path(tmpdir))
+            store.upsert_subscription(_subscription())
+            old = datetime.now(timezone.utc) - timedelta(days=30)
+            store.upsert_episode(
+                Episode(
+                    id="old",
+                    subscription_id="sub1",
+                    program_title="测试节目",
+                    title="旧节目",
+                    source_url="https://example.com/old",
+                    audio_url="https://cdn.example.com/old.mp3",
+                    published_at=old.isoformat(),
+                    created_at=old.isoformat(),
+                )
+            )
+            manager = StubJobManager(store=store, docs_dir=Path(tmpdir) / "docs")
+
+            report = run_scheduled_update(
+                store,
+                resolver=lambda _url: _feed(),
+                job_manager=manager,
+                lark_exporter=StubLarkExporter(),
+            )
+
+            self.assertEqual(manager.started, [])
+            self.assertEqual(report.attempted_count, 0)
 
 
 class RetryStubManager(StubJobManager):

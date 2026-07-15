@@ -9,6 +9,8 @@ from unittest import mock
 
 from podcast_tracker.jobs import (
     ReadableJobManager,
+    _is_retryable_asr_startup_failure,
+    _positive_int_env,
     _read_progress_stage,
     _resolve_codex_bin,
     _run_verify_readable,
@@ -58,6 +60,115 @@ def _pending_episode_with_id(episode_id: str) -> Episode:
 
 
 class ReadableJobManagerTests(unittest.TestCase):
+    def test_funasr_subprocess_retries_cloud_startup_deadlock(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir)
+            transcript_path = data_dir / "episode.md"
+            transcript_path.write_text("# 内部逐字稿\n", encoding="utf-8")
+            store = _store(data_dir)
+            episode = _episode(transcript_path)
+            store.upsert_episode(episode)
+            attempts = 0
+
+            class FinishedProcess:
+                def __init__(self, returncode: int) -> None:
+                    self.returncode = returncode
+
+                def poll(self) -> int:
+                    return self.returncode
+
+            def popen(*_args, **kwargs):
+                nonlocal attempts
+                attempts += 1
+                if attempts == 1:
+                    kwargs["stdout"].write(
+                        "init_import_site: Failed to import the site module\n"
+                        "OSError: [Errno 11] Resource deadlock avoided\n"
+                    )
+                    kwargs["stdout"].flush()
+                    return FinishedProcess(1)
+                return FinishedProcess(0)
+
+            manager = ReadableJobManager(store, run_async=False)
+            with (
+                mock.patch("podcast_tracker.jobs.JOB_DIR", data_dir / "jobs"),
+                mock.patch("podcast_tracker.jobs.subprocess.Popen", side_effect=popen),
+                mock.patch("podcast_tracker.jobs.time.sleep"),
+            ):
+                result = manager._run_funasr_transcript_subprocess(episode, lambda _stage: None)
+
+            self.assertEqual(result, transcript_path)
+            self.assertEqual(attempts, 2)
+
+    def test_only_retries_known_cloud_startup_failures(self) -> None:
+        self.assertTrue(
+            _is_retryable_asr_startup_failure(
+                "init_import_site: Failed to import the site module; "
+                "Resource deadlock avoided"
+            )
+        )
+        self.assertTrue(
+            _is_retryable_asr_startup_failure(
+                "WATCHDOG: stage load_model made no progress for 600 seconds"
+            )
+        )
+        self.assertFalse(_is_retryable_asr_startup_failure("model download failed"))
+
+    def test_funasr_subprocess_retries_stuck_startup_stage(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir)
+            transcript_path = data_dir / "episode.md"
+            transcript_path.write_text("# 内部逐字稿\n", encoding="utf-8")
+            store = _store(data_dir)
+            episode = _episode(transcript_path)
+            store.upsert_episode(episode)
+            attempts = 0
+
+            class StuckProcess:
+                returncode = None
+
+                def poll(self):
+                    return self.returncode
+
+                def kill(self) -> None:
+                    self.returncode = -9
+
+                def wait(self, timeout=None) -> int:
+                    return -9
+
+            class FinishedProcess:
+                returncode = 0
+
+                def poll(self) -> int:
+                    return 0
+
+            def popen(*_args, **_kwargs):
+                nonlocal attempts
+                attempts += 1
+                if attempts == 1:
+                    command = _args[0]
+                    progress_path = Path(command[command.index("--progress-file") + 1])
+                    progress_path.write_text('{"stage": "load_model"}\n', encoding="utf-8")
+                return StuckProcess() if attempts == 1 else FinishedProcess()
+
+            manager = ReadableJobManager(store, run_async=False)
+            with (
+                mock.patch("podcast_tracker.jobs.JOB_DIR", data_dir / "jobs"),
+                mock.patch("podcast_tracker.jobs.subprocess.Popen", side_effect=popen),
+                mock.patch("podcast_tracker.jobs.time.monotonic", side_effect=[0, 0, 3000, 3001]),
+                mock.patch("podcast_tracker.jobs.time.sleep"),
+            ):
+                result = manager._run_funasr_transcript_subprocess(episode, lambda _stage: None)
+
+            self.assertEqual(result, transcript_path)
+            self.assertEqual(attempts, 2)
+
+    def test_positive_int_env_uses_safe_default(self) -> None:
+        with mock.patch.dict(os.environ, {"TEST_TIMEOUT": "600"}):
+            self.assertEqual(_positive_int_env("TEST_TIMEOUT", 2700), 600)
+        with mock.patch.dict(os.environ, {"TEST_TIMEOUT": "not-a-number"}):
+            self.assertEqual(_positive_int_env("TEST_TIMEOUT", 2700), 2700)
+
     def test_start_readable_job_runs_codex_skill_and_detects_output(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             data_dir = Path(tmpdir)

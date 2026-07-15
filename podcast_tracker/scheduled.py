@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from .checker import CheckReport, FeedResolver, render_check_report, run_check
@@ -10,6 +11,9 @@ from .models import Episode
 from .publishing import PostGeneratePublisher
 from .readable import readable_path_for_episode
 from .store import Store
+
+
+RECENT_PENDING_LOOKBACK = timedelta(days=7)
 
 
 @dataclass(frozen=True)
@@ -151,6 +155,40 @@ def _failed_episode_ids_to_retry(
     return sorted(candidates)
 
 
+def _episode_timestamp(episode: Episode) -> datetime | None:
+    for raw_value in (episode.published_at, episode.created_at):
+        if not raw_value:
+            continue
+        try:
+            parsed = datetime.fromisoformat(raw_value.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    return None
+
+
+def _recent_unfinished_episode_ids(
+    store: Store,
+    already_processed: set[str],
+    now: datetime | None = None,
+) -> list[str]:
+    """Return recent episodes that were discovered but never reached a readable file."""
+    reference_time = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    cutoff = reference_time - RECENT_PENDING_LOOKBACK
+    candidates: list[tuple[datetime, str]] = []
+    for episode in store.load_episodes().values():
+        if episode.id in already_processed or readable_path_for_episode(episode) is not None:
+            continue
+        timestamp = _episode_timestamp(episode)
+        if timestamp is None or timestamp < cutoff:
+            continue
+        candidates.append((timestamp, episode.id))
+    candidates.sort()
+    return [episode_id for _timestamp, episode_id in candidates]
+
+
 def run_scheduled_update(
     store: Store,
     resolver: FeedResolver | None = None,
@@ -167,12 +205,20 @@ def run_scheduled_update(
         for episode in result.new_episodes:
             generated.append(_process_episode(store, manager, post_generate_publisher, episode.id))
 
-    # Self-healing: retry episodes whose previous generation failed.
+    # Self-healing: retry recorded failures, then recent episodes missed by an
+    # interrupted scheduler that did not persist its in-memory job state.
     processed_ids = {result.episode.id for result in generated}
     for episode_id in _failed_episode_ids_to_retry(store, manager, processed_ids):
         generated.append(
             _process_episode(store, manager, post_generate_publisher, episode_id, retried=True)
         )
+        processed_ids.add(episode_id)
+
+    for episode_id in _recent_unfinished_episode_ids(store, processed_ids):
+        generated.append(
+            _process_episode(store, manager, post_generate_publisher, episode_id, retried=True)
+        )
+        processed_ids.add(episode_id)
 
     return ScheduledUpdateReport(check_report=check_report, generated=tuple(generated))
 

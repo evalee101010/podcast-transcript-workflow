@@ -20,6 +20,14 @@ from .readable import readable_path_for_episode, speaker_map_path_for_readable
 from .store import Store
 
 
+def _positive_int_env(name: str, default: int) -> int:
+    try:
+        value = int(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
 JOB_DIR = private_runtime_dir() / "jobs"
 JOB_STATE_FILE = private_runtime_dir() / "jobs_state.json"
 ACTIVE_STATUSES = {"queued", "running"}
@@ -47,7 +55,9 @@ STAGE_TIMEOUT_SECONDS = {
     "prepare_audio": 600,
     "download_audio": 1800,
     "convert_audio": 1800,
-    "load_model": 2700,  # first run may download models from ModelScope
+    "load_model": _positive_int_env(
+        "PODCAST_TRACKER_MODEL_LOAD_TIMEOUT_SECONDS", 2700
+    ),  # first run may download models from ModelScope
     "transcribe_audio": 3 * 3600,
     "write_transcript": 600,
 }
@@ -60,6 +70,9 @@ ASR_LOCK_WAIT_SECONDS = 6 * 3600
 # Jobs interrupted by a restart are requeued automatically this many times.
 MAX_AUTO_ATTEMPTS = 1
 ASR_BACKEND_ENV = "PODCAST_TRACKER_ASR_BACKEND"
+ASR_STARTUP_MAX_ATTEMPTS = 3
+ASR_STARTUP_RETRY_DELAY_SECONDS = 2
+ASR_RETRYABLE_WATCHDOG_STAGES = {"prepare_audio", "load_model"}
 
 CommandRunner = Callable[[list[str], Path, Path], int]
 TranscriptRunner = Callable[[Episode, Callable[[str], None]], Path]
@@ -462,8 +475,16 @@ class ReadableJobManager:
         env = os.environ.copy()
         env.setdefault("PYTHONUNBUFFERED", "1")
         env.setdefault("PODTRACK_DISABLE_CLUSTER_PATCH", "1")
-        try:
-            with log_path.open("w", encoding="utf-8") as log:
+        exit_code = 1
+        for attempt in range(1, ASR_STARTUP_MAX_ATTEMPTS + 1):
+            try:
+                progress_file.unlink()
+            except OSError:
+                pass
+            mode = "w" if attempt == 1 else "a"
+            with log_path.open(mode, encoding="utf-8") as log:
+                if attempt > 1:
+                    log.write(f"\n\nRETRY: startup attempt {attempt}\n")
                 log.write("$ " + " ".join(command) + "\n\n")
                 log.flush()
                 process = subprocess.Popen(
@@ -497,6 +518,15 @@ class ReadableJobManager:
                             f"\n\nWATCHDOG: stage {stuck_stage} made no progress for "
                             f"{limit} seconds; subprocess killed.\n"
                         )
+                        try:
+                            progress_file.unlink()
+                        except OSError:
+                            pass
+                        if (
+                            stuck_stage in ASR_RETRYABLE_WATCHDOG_STAGES
+                            and attempt < ASR_STARTUP_MAX_ATTEMPTS
+                        ):
+                            break
                         raise RuntimeError(
                             f"ASR 子进程在阶段 {stuck_stage} 超过 {limit // 60} 分钟无进展，"
                             f"已强制终止（常见原因：外接盘休眠、模型下载卡住）。Log: {log_path}"
@@ -506,16 +536,26 @@ class ReadableJobManager:
                 if stage and stage != last_stage:
                     progress_callback(stage)
                 exit_code = process.returncode
-        finally:
-            try:
-                progress_file.unlink()
-            except OSError:
-                pass
-        if exit_code != 0:
+
+            if exit_code == 0:
+                break
             detail = log_path.read_text(encoding="utf-8", errors="replace")[-4000:]
-            raise RuntimeError(
-                f"FunASR subprocess exited with status {exit_code}. Log: {log_path}\n{detail}"
-            )
+            if attempt >= ASR_STARTUP_MAX_ATTEMPTS or not _is_retryable_asr_startup_failure(
+                detail
+            ):
+                try:
+                    progress_file.unlink()
+                except OSError:
+                    pass
+                raise RuntimeError(
+                    f"FunASR subprocess exited with status {exit_code}. Log: {log_path}\n{detail}"
+                )
+            time.sleep(ASR_STARTUP_RETRY_DELAY_SECONDS * attempt)
+
+        try:
+            progress_file.unlink()
+        except OSError:
+            pass
 
         updated = self._get_episode(episode.id)
         transcript_path = _existing_transcript_path(updated)
@@ -717,6 +757,16 @@ def _read_progress_stage(progress_file: Path) -> str | None:
         return None
     stage = data.get("stage")
     return str(stage) if isinstance(stage, str) and stage else None
+
+
+def _is_retryable_asr_startup_failure(detail: str) -> bool:
+    normalized = detail.lower()
+    return "resource deadlock avoided" in normalized or (
+        "init_import_site" in normalized and "failed to import the site module" in normalized
+    ) or (
+        "watchdog: stage prepare_audio" in normalized
+        or "watchdog: stage load_model" in normalized
+    )
 
 
 def _existing_transcript_path(episode: Episode) -> Path | None:

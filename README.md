@@ -170,7 +170,10 @@ export PODCAST_TRACKER_LARK_CHAT_NAME="Your Group Chat Name"
 export PODCAST_TRACKER_ASR_BACKEND=funasr   # default
 export PODCAST_TRACKER_ASR_BACKEND=whisper
 export PODCAST_TRACKER_ASR_BACKEND=openai
+export PODCAST_TRACKER_MODEL_LOAD_TIMEOUT_SECONDS=2700
 ```
+
+The FunASR startup watchdog retries temporary environment-read failures and stalled model loads. Lower `PODCAST_TRACKER_MODEL_LOAD_TIMEOUT_SECONDS` when a local or cloud-synced runtime should fail fast and retry.
 
 Optional dependencies:
 
